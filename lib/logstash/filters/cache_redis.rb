@@ -22,7 +22,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     config :wait_max_time, :validate => :number, :default => 0
 
     config :expire_ex, :validate => :number, :default => 0
-	
+
     config :tag_on_failure, :validate => :string, :default => "_cache_redis_failure"
 
     config :remain_origin, :validate => :boolean, :default => "false"
@@ -114,19 +114,19 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             cmd_res = true
 
             if @operate.nil?
-            	@logger.error("no operate declared !", :event => event,)
+                @logger.error("no operate declared !", :event => event,)
 
             else
 
-            	if @operate.eql?(@CMD_SET)
-            		if @expire_ex > 0
-            			cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), ex:@expire_ex)
+                if @operate.eql?(@CMD_SET)
+                    if @expire_ex > 0
+                        cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), ex:@expire_ex)
                     else
                         cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val))
                     end
-				
-				elsif @operate.eql?(@CMD_GET)
-					val = @redis.get(event.sprintf(@redis_key))
+
+                elsif @operate.eql?(@CMD_GET)
+                    val = @redis.get(event.sprintf(@redis_key))
                     while val.nil? and l_wait_max_time > 0 do
                         sleep(@wait_interval)
                         val = @redis.get(event.sprintf(@redis_key))
@@ -139,7 +139,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     end
 
                 elsif @operate.eql?(@CMD_GETDEL)
-                	val = @redis.get(event.sprintf(@redis_key))
+                    val = @redis.get(event.sprintf(@redis_key))
                     while val.nil? and l_wait_max_time > 0 do
                         sleep(@wait_interval)
                         val = @redis.get(event.sprintf(@redis_key))
@@ -154,54 +154,54 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     end
 
                 elsif @operate.eql?(@CMD_SETNX)
-                	if @expire_ex > 0
+                    if @expire_ex > 0
                         cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), ex:@expire_ex, nx:true)
                     else
                         cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), nx:true)
                     end
 
                 elsif @operate.eql?(@CMD_DEL)
-                	cmd_res = @redis.del(event.sprintf(@redis_key))
+                    cmd_res = @redis.del(event.sprintf(@redis_key))
 
                 elsif @operate.eql?(@CMD_CACHE_EVENT)
-                	fields = event.to_hash.keys.map { |k| "[#{k}]" }
+                    fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
-                	@redis.multi()
-                	fields.each do |ffield|
-                		@redis.hset(event.sprintf(@redis_key), ffield, event.get(ffield))
-                	end
-                	m_r = @redis.exec()
-                	m_r.each do |ff|
-                		if ff != 1
-                			cmd_res = false
-                		end
-                	end
+                    @redis.multi()
+                    fields.each do |ffield|
+                        @redis.hset(event.sprintf(@redis_key), ffield, event.get(ffield))
+                    end
+                    m_r = @redis.exec()
+                    m_r.each do |ff|
+                        if ff != 1
+                            cmd_res = false
+                        end
+                    end
 
                 elsif @operate.eql?(@CMD_USE_EVNET)
-                	n_event = @redis.hgetall(event.sprintf(@redis_key))
-                	while n_event.empty? and l_wait_max_time > 0 do
+                    n_event = @redis.hgetall(event.sprintf(@redis_key))
+                    while n_event.empty? and l_wait_max_time > 0 do
                         sleep(@wait_interval)
                         n_event = @redis.hgetall(event.sprintf(@redis_key))
                         l_wait_max_time = l_wait_max_time - 1
                     end
 
                     if n_event.empty?
-                    	cmd_res = false
+                        cmd_res = false
                     elsif
-                    	if not @remain_origin
-                    	    origin_fields = event.to_hash.keys.map { |k| "[#{k}]" }
-                    	    origin_fields.each do |ori_f|
-                    	    	if not @remain_fields.include?(ori_f)
-                    	    		event.remove(ori_f)
-                    	    	end
-                    	    end
-                    	end
+                        if not @remain_origin
+                            origin_fields = event.to_hash.keys.map { |k| "[#{k}]" }
+                            origin_fields.each do |ori_f|
+                                if not @remain_fields.include?(ori_f)
+                                    event.remove(ori_f)
+                                end
+                            end
+                        end
 
 
-                	    fields = n_event.to_hash.keys.map { |k| "[#{k}]" }
-                	    fields.each do |ffield|
-                	    	event.set(ffield, n_event[ffield])
-                	    end
+                        fields = n_event.to_hash.keys.map { |k| "[#{k}]" }
+                        fields.each do |ffield|
+                            event.set(ffield, n_event[ffield])
+                        end
 
                     end
 
