@@ -7,18 +7,27 @@ require "redlock"
 class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     config_name "cache_redis"
 
-    # The field to perform filter
-    #
-    config :source, :validate => :string, :default => "message"
 
-    # The name of the container to put the result
-    #
-    config :target, :validate => :string, :default => "message"
+    config :operate, :validate => :string, :default => "get"
 
-    config :field, :validate => :string
+    config :redis_key, :validate => :string, :default => "%{_id}"
 
-    # For now only working for rpushnx and llen!
-    config :cmd_key_is_formatted, :validate => :boolean, :default => false
+    config :redis_val, :validate => :string, :default => "%{_message}"
+
+    config :field, :validate => :string, default => "message"
+
+
+    config :wait_interval, :validate => :number, :default => 0
+    
+    config :wait_max_time, :validate => :number, :default => 0
+
+    config :expire_ex, :validate => :number, :default => 0
+	
+    config :tag_on_failure, :validate => :string, :default => "_cache_redis_failure"
+
+
+
+
 
     # The hostname(s) of your Redis server(s). Ports may be specified on any
     # hostname, which will override the global port config.
@@ -59,55 +68,12 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     # Maximal count of retries to acquire a lock
     config :max_lock_retries, :validate => :number, :default => 3
 
-    config :get, :validate => :string
-
-    config :set, :validate => :string
-
-    config :exists, :validate => :string
-
-    config :del, :validate => :string
-
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    config :llen, :validate => :string
-
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    config :rpush, :validate => :string
-
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    config :rpushnx, :validate => :string
-
-    # Sets the action. If set to true, it will get the data from redis cache
-    config :hset, :validate => :string
-
-    # Sets the action. If set to true, it will get the data from redis cache
-    config :hget, :validate => :string
-
-    config :sadd, :validate => :string
-
-    config :sismember, :validate => :string
-
-    config :smembers, :validate => :string
-
-    config :scard, :validate => :string
-
     # config :get, :validate => :boolean, :default => false
     config :lock_timeout, :validate => :number, :default => 5000
 
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    config :rpop, :validate => :string
 
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    config :lpop, :validate => :string
 
-    # # Sets the action. If set to true, it will get the data from redis cache
-    # config :get, :validate => :boolean, :default => false
-    # O(N)
-    config :lget, :validate => :string
+
 
 
     public
@@ -118,6 +84,14 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             @host.shuffle!
         end
         @host_idx = 0
+
+        @CMD_GET = "get"
+        @CMD_SET = "set"
+        @CMD_GETDEL = "getdel"
+        @CMD_SETNX = "setnx"
+        @CMD_DEL = "del"
+        @CMD_CACHE_EVENT = "cace_evnet"
+        @CMD_USE_EVENT = "use_event"
     end # def register
 
 
@@ -132,84 +106,110 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         begin
             @redis ||= connect
 
-            if @get
-                event.set(@target, @redis.get(event.get(@get)))
-            end
 
-            if @set
-                @redis.set(event.get(@set), event.get(@source))
-            end
+            l_wait_max_time = @wait_max_time
+            cmd_res = true
 
-            if @exists
-                @redis.exists(event.get(@exists))
-            end
+            if @operate.nil?
+            	@logger.error("no operate declared !", :event => event,)
 
-            if @del
-                @redis.del(event.get(@del))
-            end
+            else
 
-            if @hget
-                event.set(@target, @redis.hget(event.get(@hget), event.get(@source)))
-            end
-
-            if @hset
-                @redis.hset(event.get(@hset), event.get(@field), event.get(@source))
-            end
-
-            if @sadd
-                @redis.sadd(event.get(@sadd), event.get(@source))
-            end
-
-            if @sismember
-                event.set(@target, @redis.sismember(event.get(@sismember), event.get(@source)))
-            end
-
-            if @smembers
-                @redis.smembers(event.get(@smembers))
-            end
-
-            if @scard
-                event.set(@target, @redis.scard(event.get(@scard)))
-            end
-
-            if @llen
-                key = @cmd_key_is_formatted ? event.sprintf(@llen) : event.get(@llen)
-                event.set(@target, @redis.llen(key))
-            end
-
-            if @rpush
-                @redis.rpush(event.get(@rpush), event.get(@source))
-            end
-
-            if @rpushnx
-                key = @cmd_key_is_formatted ? event.sprintf(@rpushnx) : event.get(@rpushnx)
-                max_lock_retries = @max_lock_retries
-                begin
-                    @lock_manager ||= connect_lockmanager
-                    @lock_manager.lock!("lock_#{key}", @lock_timeout) do
-                        @redis.rpush(key, event.get(@source)) unless @redis.exists(key)
-                    end
-                rescue Redlock::LockError => e
-                    @logger.warn("Failed to lock section 'rpushnx' for key: #{key}",
-                                 :event => event, :exception => e)
-                    sleep @lock_retry_interval
-                    max_lock_retries -= 1
-                    unless max_lock_retries < 0
-                        retry
+            	if @operate.eql?(@CMD_SET)
+            		if @expire_ex > 0
+            			cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), ex:@expire_ex)
                     else
-                        @logger.error("Max retries reached for trying to lock section 'rpushnx' for key: #{key}",
-                                      :event => event, :exception => e)
+                        cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val))
                     end
+				
+				elsif @operate.eql?(@CMD_GET)
+					val = @redis.get(event.sprintf(@redis_key))
+                    while val.nil? and l_wait_max_time > 0 do
+                        sleep(@wait_interval)
+                        val = @redis.get(event.sprintf(@redis_key))
+                        l_wait_max_time = l_wait_max_time - 1
+                    end
+                    event.set(@field, val)
+                
+                    if val.nil?
+                        cmd_res = false;
+                    end
+
+                elsif @operate.eql?(@CMD_GETDEL)
+                	val = @redis.get(event.sprintf(@redis_key))
+                    while val.nil? and l_wait_max_time > 0 do
+                        sleep(@wait_interval)
+                        val = @redis.get(event.sprintf(@redis_key))
+                        l_wait_max_time = l_wait_max_time - 1
+                    end
+                    event.set(@field, val)
+                
+                    if val.nil?
+                        cmd_res = false;
+                    else
+                        @redis.del(event.sprintf(@redis_key))
+                    end
+
+                elsif @operate.eql?(@CMD_SETNX)
+                	if @expire_ex > 0
+                        cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), ex:@expire_ex, nx:true)
+                    else
+                        cmd_res = @redis.set(event.sprintf(@redis_key), event.sprintf(@redis_val), nx:true)
+                    end
+
+                elsif @operate.eql?(@CMD_DEL)
+                	cmd_res = @redis.del(event.sprintf(@redis_key))
+
+                elsif @operate.eql?(@CMD_CACHE_EVENT)
+                	fields = event.to_hash.keys.map { |k| "[#{k}]" }
+
+                	@redis.multi()
+                	fields.each do |ffield|
+                		@redis.hset(event.sprintf(@redis_key), ffield, event.get(ffield))
+                	end
+                	m_r = @redis.exec()
+                	m_r.each do |ff|
+                		if ff != 1
+                			cmd_res = false
+                		end
+                	end
+
+                elsif @operate.eql?(@CMD_USE_EVNET)
+                	n_event = @redis.hgetall(event.sprintf(@redis_key))
+                	while n_event.empty? and l_wait_max_time > 0 do
+                        sleep(@wait_interval)
+                        n_event = @redis.hgetall(event.sprintf(@redis_key))
+                        l_wait_max_time = l_wait_max_time - 1
+                    end
+
+                    if n_event.empty?
+                    	cmd_res = false
+                    elsif
+                	    fields = n_event.to_hash.keys.map { |k| "[#{k}]" }
+                	    fields.each do |ffield|
+                	    	event.set(ffield, n_event[ffield])
+                	    end
+
+                    end
+
+
+
+
+
+                    
                 end
+
+
+
+                if not cmd_res
+                    event.tag(@tag_on_failure)
+                end
+
             end
 
-            if @rpop
-                event.set(@target, @redis.rpop(event.get(@rpop)))
-            end
 
-            if @lget
-                event.set(@target, @redis.lrange(event.get(@lget), 0, -1))
-            end
+
+
 
         rescue => e
             @logger.warn("Failed to send event to Redis, retrying after #{@reconnect_interval} seconds...", :event => event,
