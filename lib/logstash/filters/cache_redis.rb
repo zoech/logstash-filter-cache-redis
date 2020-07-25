@@ -25,6 +25,9 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 	
     config :tag_on_failure, :validate => :string, :default => "_cache_redis_failure"
 
+    config :remain_origin, :validate => :boolean, :default => "false"
+
+    config :remain_fields, :validate => :array, :default => []
 
 
 
@@ -185,6 +188,16 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     if n_event.empty?
                     	cmd_res = false
                     elsif
+                    	if not @remain_origin
+                    	    origin_fields = event.to_hash.keys.map { |k| "[#{k}]" }
+                    	    origin_fields.each do |ori_f|
+                    	    	if not @remain_fields.include?(ori_f)
+                    	    		event.remove(ori_f)
+                    	    	end
+                    	    end
+                    	end
+
+
                 	    fields = n_event.to_hash.keys.map { |k| "[#{k}]" }
                 	    fields.each do |ffield|
                 	    	event.set(ffield, n_event[ffield])
