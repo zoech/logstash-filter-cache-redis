@@ -14,7 +14,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
     config :redis_val, :validate => :string, :default => "%{_message}"
 
-    config :field, :validate => :string, default => "message"
+    config :field, :validate => :string, :default => "message"
 
 
     config :wait_interval, :validate => :number, :default => 0
@@ -93,7 +93,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         @CMD_GETDEL = "getdel"
         @CMD_SETNX = "setnx"
         @CMD_DEL = "del"
-        @CMD_CACHE_EVENT = "cace_evnet"
+        @CMD_CACHE_EVENT = "cache_evnet"
         @CMD_USE_EVENT = "use_event"
     end # def register
 
