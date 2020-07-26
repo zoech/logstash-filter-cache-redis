@@ -166,16 +166,16 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                 elsif @operate.eql?(@CMD_CACHE_EVENT)
                     fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
-                    @redis.multi()
+                    #@redis.multi()
                     fields.each do |ffield|
-                        @redis.hset(event.sprintf(@redis_key), ffield, event.get(ffield))
+                    	redis_cache_hash_field(event, @redis_key, ffield)
                     end
-                    m_r = @redis.exec()
-                    m_r.each do |ff|
-                        if ff != 1
-                            cmd_res = false
-                        end
-                    end
+                    #m_r = @redis.exec()
+                    #m_r.each do |ff|
+                    #    if ff != 1
+                    #        cmd_res = false
+                    #    end
+                    #end
 
                 elsif @operate.eql?(@CMD_USE_EVNET)
                     n_event = @redis.hgetall(event.sprintf(@redis_key))
@@ -276,5 +276,19 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
         Redlock::Client.new(hosts)
     end # def connect
+
+
+
+    def redis_cache_hash_field(event, redis_key, filed)
+        val = event.get(filed)
+        if val.is_a?(Hash) || value.is_a?(java.util.Map)
+            val.keys.each do |key|
+            	redis_cache_hash_field(event, redis_key, "#{field}[#{key}]")
+            end
+        else
+        	@redis.hset(event.sprintf(redis_key), filed, val)
+        end
+
+    end
 
 end # class LogStash::Filters::Example
