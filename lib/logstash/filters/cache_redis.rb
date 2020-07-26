@@ -3,6 +3,7 @@ require "logstash/filters/base"
 require "logstash/namespace"
 require "redis"
 require "redlock"
+require "monitor"
 
 class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     config_name "cache_redis"
@@ -82,11 +83,15 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     public
     def register
         @redis = nil
+        @mul_redis = nil
         @lock_manager = nil
         if @shuffle_hosts
             @host.shuffle!
         end
         @host_idx = 0
+
+        lock = Monitor.new
+
 
         @CMD_GET = "get"
         @CMD_SET = "set"
@@ -164,18 +169,26 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     cmd_res = @redis.del(event.sprintf(@redis_key))
 
                 elsif @operate.eql?(@CMD_CACHE_EVENT)
+
+
                     fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
-                    #@redis.multi()
-                    fields.each do |ffield|
-                        redis_cache_hash_field(event, @redis_key, ffield)
+                    m_r = nil
+                    lock.synchronize do
+                        @mul_redis ||= conect
+                        @mul_redis.multi()
+                        fields.each do |ffield|
+                            redis_cache_hash_field(event, @redis_key, ffield)
+                        end
+                        m_r = @mul_redis.exec()
                     end
-                    #m_r = @redis.exec()
-                    #m_r.each do |ff|
-                    #    if ff != 1
-                    #        cmd_res = false
-                    #    end
-                    #end
+
+
+                    m_r.each do |ff|
+                        if ff != 1
+                            cmd_res = false
+                        end
+                    end
 
                 elsif @operate.eql?(@CMD_USE_EVENT)
                     n_event = @redis.hgetall(event.sprintf(@redis_key))
@@ -281,10 +294,10 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         val = event.get(ff)
         if val.is_a?(Hash) || val.is_a?(java.util.Map)
             val.keys.each do |key|
-            	redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
+                redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
             end
         else
-        	@redis.hset(event.sprintf(redis_key), ff, val)
+        	@mul_redis.hset(event.sprintf(redis_key), ff, val)
         end
 
     end
