@@ -279,14 +279,14 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
 
 
-    def redis_cache_hash_field(event, redis_key, filed)
-        val = event.get(filed)
-        if val.is_a?(Hash) || value.is_a?(java.util.Map)
+    def redis_cache_hash_field(event, redis_key, ff)
+        val = event.get(ff)
+        if val.is_a?(Hash) || val.is_a?(java.util.Map)
             val.keys.each do |key|
-            	redis_cache_hash_field(event, redis_key, "#{field}[#{key}]")
+            	redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
             end
         else
-        	@redis.hset(event.sprintf(redis_key), filed, val)
+        	@redis.hset(event.sprintf(redis_key), ff, val)
         end
 
     end
