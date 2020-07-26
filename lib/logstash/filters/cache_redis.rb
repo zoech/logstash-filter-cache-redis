@@ -90,7 +90,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         end
         @host_idx = 0
 
-        lock = Monitor.new
+        @lock = Monitor.new
 
 
         @CMD_GET = "get"
@@ -174,7 +174,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
                     m_r = nil
-                    lock.synchronize do
+                    @lock.synchronize do
                         @mul_redis ||= conect
                         @mul_redis.multi()
                         fields.each do |ffield|
