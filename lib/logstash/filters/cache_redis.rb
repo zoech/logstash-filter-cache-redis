@@ -168,7 +168,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     #@redis.multi()
                     fields.each do |ffield|
-                    	redis_cache_hash_field(event, @redis_key, ffield)
+                        redis_cache_hash_field(event, @redis_key, ffield)
                     end
                     #m_r = @redis.exec()
                     #m_r.each do |ff|
@@ -191,14 +191,12 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         if not @remain_origin
                             origin_fields = event.to_hash.keys.map { |k| "[#{k}]" }
                             origin_fields.each do |ori_f|
-                                if not @remain_fields.include?(ori_f)
-                                    event.remove(ori_f)
-                                end
+                                remove_field(event, ori_f, @remain_fields)
                             end
                         end
 
 
-                        fields = n_event.to_hash.keys.map { |k| "[#{k}]" }
+                        fields = n_event.keys
                         fields.each do |ffield|
                             event.set(ffield, n_event[ffield])
                         end
@@ -287,6 +285,21 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             end
         else
         	@redis.hset(event.sprintf(redis_key), ff, val)
+        end
+
+    end
+
+
+    def remove_field(event, ff, remains)
+        val = event.get(ff)
+        if val.is_a?(Hash) || val.is_a?(java.util.Map)
+            val.keys.each do |key|
+                remove_field(event, "#{ff}[#{key}]", remains)
+            end
+        else
+            if not remains.include?(ff)
+                event.remove(ff)
+            end
         end
 
     end
