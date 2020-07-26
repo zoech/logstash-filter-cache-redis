@@ -177,7 +177,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     #    end
                     #end
 
-                elsif @operate.eql?(@CMD_USE_EVNET)
+                elsif @operate.eql?(@CMD_USE_EVENT)
                     n_event = @redis.hgetall(event.sprintf(@redis_key))
                     while n_event.empty? and l_wait_max_time > 0 do
                         sleep(@wait_interval)
