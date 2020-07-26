@@ -175,7 +175,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     m_r = nil
                     @lock.synchronize do
-                        @mul_redis ||= conect
+                        @mul_redis ||= connect
                         @mul_redis.multi()
                         fields.each do |ffield|
                             redis_cache_hash_field(event, @redis_key, ffield)
