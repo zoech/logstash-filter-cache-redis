@@ -302,13 +302,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                 redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
             end
         else
-            case val
-            when LogStash::Timestamp,Time
-                ival = (val.to_f * 1000.0).to_i
-                @mul_redis.hset(event.sprintf(redis_key), ff, ival)
-            else
-                @mul_redis.hset(event.sprintf(redis_key), ff, val)
-            end
+            @mul_redis.hset(event.sprintf(redis_key), ff, val)
         end
 
     end
