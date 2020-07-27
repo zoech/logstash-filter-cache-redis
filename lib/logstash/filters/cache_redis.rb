@@ -175,37 +175,29 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
-                    cmd_res = false
-                    try_c = 0
-                    while not cmd_res and try_c < @max_retries
-
-
-                        m_r = nil
-                        cmd_res = true
-                        c_ffs = Array.new
-                        @lock.synchronize do
-                            @mul_redis ||= connect
-                            @mul_redis.multi()
-                            fields.each do |ffield|
-                                redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
-                            end
-                            if @expire_ex > 0
-                                @mul_redis.expire(@redis_key, @expire_ex)
-                            end
-                            m_r = @mul_redis.exec()
+                    m_r = nil
+                    c_ffs = Array.new
+                    @lock.synchronize do
+                        @mul_redis ||= connect
+                        @mul_redis.multi()
+                        fields.each do |ffield|
+                            redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
                         end
-
-                        ii = 0;
-                        m_r.each do |ff|
-                            if ff != 1
-                                cmd_res = false
-                                ftmp = c_ffs[ii]
-                                @logger.warn("redis.multi() queue failed #{ftmp}...", :event => event)
-                                ii = ii + 1
-                            end
+                        if @expire_ex > 0
+                            @mul_redis.expire(@redis_key, @expire_ex)
                         end
+                        m_r = @mul_redis.exec()
+                    end
 
-                        try_c = try_c + 1
+
+                    ii = 0;
+                    m_r.each do |ff|
+                        if ff != 1
+                            cmd_res = false
+                            ftmp = c_ffs[ii]
+                            @logger.warn("redis.multi() queue failed #{ftmp}...", :event => event)
+                            ii = ii + 1
+                        end
                     end
 
 
@@ -319,7 +311,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         val = event.get(ff)
         if val.is_a?(Hash) || val.is_a?(java.util.Map)
             val.keys.each do |key|
-                redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]", ignore_ff)
+                redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]", ignore_ff, arr_fields)
             end
         else
             if not ignore_ff.include?(ff)
