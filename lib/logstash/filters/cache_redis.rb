@@ -204,6 +204,8 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                                 ii = ii + 1
                             end
                         end
+
+                        try_c = try_c + 1
                     end
 
 
