@@ -63,7 +63,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     config :password, :validate => :password
 
     # Interval for reconnecting to failed Redis connections
-    config :reconnect_interval, :validate => :number, :default => 1
+    config :reconnect_interval, :validate => :number, :default => 0.2
 
     # Maximal count of command retries after a crash because of a failure
     config :max_retries, :validate => :number, :default => 3
@@ -175,25 +175,38 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     fields = event.to_hash.keys.map { |k| "[#{k}]" }
 
-                    m_r = nil
-                    @lock.synchronize do
-                        @mul_redis ||= connect
-                        @mul_redis.multi()
-                        fields.each do |ffield|
-                            redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields)
+                    cmd_res = false
+                    try_c = 0
+                    while not cmd_res and try_c < @max_retries
+
+
+                        m_r = nil
+                        cmd_res = true
+                        c_ffs = Array.new
+                        @lock.synchronize do
+                            @mul_redis ||= connect
+                            @mul_redis.multi()
+                            fields.each do |ffield|
+                                redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
+                            end
+                            if @expire_ex > 0
+                                @mul_redis.expire(@redis_key, @expire_ex)
+                            end
+                            m_r = @mul_redis.exec()
                         end
-                        if @expire_ex > 0
-                            @mul_redis.expire(@redis_key, @expire_ex)
+
+                        ii = 0;
+                        m_r.each do |ff|
+                            if ff != 1
+                                cmd_res = false
+                                ftmp = c_ffs[ii]
+                                @logger.warn("redis.multi() queue failed #{ftmp}...", :event => event)
+                                ii = ii + 1
+                            end
                         end
-                        m_r = @mul_redis.exec()
                     end
 
 
-                    m_r.each do |ff|
-                        if ff != 1
-                            cmd_res = false
-                        end
-                    end
 
                 elsif @operate.eql?(@CMD_USE_EVENT)
                     n_event = @redis.hgetall(event.sprintf(@redis_key))
@@ -300,7 +313,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
 
 
-    def redis_cache_hash_field(event, redis_key, ff, ignore_ff)
+    def redis_cache_hash_field(event, redis_key, ff, ignore_ff, arr_fields)
         val = event.get(ff)
         if val.is_a?(Hash) || val.is_a?(java.util.Map)
             val.keys.each do |key|
@@ -309,6 +322,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         else
             if not ignore_ff.include?(ff)
                 @mul_redis.hset(event.sprintf(redis_key), ff, val)
+                arr_fields << ff
             end
         end
 
