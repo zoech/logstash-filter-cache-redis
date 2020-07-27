@@ -196,8 +196,8 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                             cmd_res = false
                             ftmp = c_ffs[ii]
                             @logger.warn("redis.multi() queue failed #{ftmp}...", :event => event)
-                            ii = ii + 1
                         end
+                        ii = ii + 1
                     end
 
 
