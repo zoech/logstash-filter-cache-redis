@@ -211,7 +211,12 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                         fields = n_event.keys
                         fields.each do |ffield|
-                            event.set(ffield, n_event[ffield])
+                            if ffield == "@timestamp" || ffield == "[@timestamp]"
+                                val = LogStash::Timestamp.new(n_event[ffield])
+                                event.set(ffield, val)
+                            else
+                                event.set(ffield, n_event[ffield])
+                            end
                         end
 
                     end
@@ -297,7 +302,13 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                 redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
             end
         else
-        	@mul_redis.hset(event.sprintf(redis_key), ff, val)
+            case val
+            when LogStash::Timestamp,Time
+                ival = (val.to_f * 1000.0).to_i
+                @mul_redis.hset(event.sprintf(redis_key), ff, ival)
+            else
+                @mul_redis.hset(event.sprintf(redis_key), ff, val)
+            end
         end
 
     end
