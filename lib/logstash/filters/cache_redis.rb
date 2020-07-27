@@ -213,6 +213,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     if n_event.empty?
                         cmd_res = false
+                        @logger.warn("redis cache, use_event recieve empty event ...", :event => event)
                     else
                         if not @remain_origin
                             origin_fields = event.to_hash.keys.map { |k| "[#{k}]" }
