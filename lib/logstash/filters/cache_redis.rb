@@ -196,7 +196,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         if ff != 1
                             cmd_res = false
                             ftmp = c_ffs[ii]
-                            @logger.warn("redis.multi() queue failed #{ftmp}...", :event => event)
+                            @logger.warn("redis.multi() queue failed [#{ftmp}] : #{ff} ...", :event => event)
                         end
                         ii = ii + 1
                     end
@@ -265,6 +265,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             else
                 @logger.error("Max retries reached for trying to execute a command",
                               :event => event, :exception => e)
+                event.tag(@tag_on_failure)
             end
         end
 
