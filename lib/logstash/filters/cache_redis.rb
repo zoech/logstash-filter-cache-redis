@@ -185,6 +185,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         end
                         if @expire_ex > 0
                             @mul_redis.expire(@redis_key, @expire_ex)
+                            cffs << "expire command"
                         end
                         m_r = @mul_redis.exec()
                     end
