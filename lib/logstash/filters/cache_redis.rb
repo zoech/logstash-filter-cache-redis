@@ -28,7 +28,9 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
     config :remain_origin, :validate => :boolean, :default => "false"
 
-    config :remain_fields, :validate => :array, :default => []
+    config :remain_fields, :validate => :array, :default => ["@timestamp", "[@timestamp]"]
+
+    config :ignore_fields, :validate => :array, :default => []
 
 
 
@@ -178,7 +180,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         @mul_redis ||= connect
                         @mul_redis.multi()
                         fields.each do |ffield|
-                            redis_cache_hash_field(event, @redis_key, ffield)
+                            redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields)
                         end
                         m_r = @mul_redis.exec()
                     end
@@ -295,14 +297,16 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
 
 
-    def redis_cache_hash_field(event, redis_key, ff)
+    def redis_cache_hash_field(event, redis_key, ff, ignore_ff)
         val = event.get(ff)
         if val.is_a?(Hash) || val.is_a?(java.util.Map)
             val.keys.each do |key|
-                redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]")
+                redis_cache_hash_field(event, redis_key, "#{ff}[#{key}]", ignore_ff)
             end
         else
-            @mul_redis.hset(event.sprintf(redis_key), ff, val)
+            if not ignore_ff.include?(ff)
+                @mul_redis.hset(event.sprintf(redis_key), ff, val)
+            end
         end
 
     end
