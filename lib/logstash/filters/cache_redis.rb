@@ -184,7 +184,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                             redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
                         end
                         if @expire_ex > 0
-                            @mul_redis.expire(@redis_key, @expire_ex)
+                            @mul_redis.expire(event.sprintf(@redis_key), @expire_ex)
                             c_ffs << "expire command"
                         end
                         m_r = @mul_redis.exec()
