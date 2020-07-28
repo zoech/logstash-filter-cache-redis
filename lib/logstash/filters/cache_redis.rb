@@ -177,28 +177,52 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                     m_r = nil
                     c_ffs = Array.new
-                    @lock.synchronize do
-                        @mul_redis ||= connect
-                        @mul_redis.multi()
-                        fields.each do |ffield|
-                            redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
+
+                    begin
+                        @lock.synchronize do
+                            @mul_redis ||= connect
+                            @mul_redis.multi()
+                            fields.each do |ffield|
+                                redis_cache_hash_field(event, @redis_key, ffield, @ignore_fields, c_ffs)
+                            end
+                            if @expire_ex > 0
+                                @mul_redis.expire(event.sprintf(@redis_key), @expire_ex)
+                                c_ffs << "expire command"
+                            end
+                            m_r = @mul_redis.exec()
                         end
-                        if @expire_ex > 0
-                            @mul_redis.expire(event.sprintf(@redis_key), @expire_ex)
-                            c_ffs << "expire command"
+
+                    rescue => e
+
+                        begin
+                            @mul_redis.discard()
+                        rescue => ee
+                            @logger.warn("redis discard() failed!", event => event)
                         end
-                        m_r = @mul_redis.exec()
+                        max_retries -= 1
+                        unless max_retries < 0
+                            sleep @reconnect_interval
+                            retry
+                        else
+                            @logger.error("Max retries reached for trying to execute a command",
+                              :event => event, :exception => e)
+                            event.tag(@tag_on_failure)
+                        end
                     end
 
-
-                    ii = 0;
-                    m_r.each do |ff|
-                        if ff != 1
-                            cmd_res = false
-                            ftmp = c_ffs[ii]
-                            @logger.warn("redis.multi() queue failed [#{ftmp}] : #{ff} ...", :event => event)
+                    if m_r.nil?
+                        cmd_res = false
+                        @logger.warn("redis_cache_event failed, redis.exec() not running", event => event)
+                    else 
+                        ii = 0;
+                        m_r.each do |ff|
+                            if ff != 1
+                                cmd_res = false
+                                ftmp = c_ffs[ii]
+                                @logger.warn("redis.multi() queue failed [#{ftmp}] : #{ff} ...", :event => event)
+                            end
+                            ii = ii + 1
                         end
-                        ii = ii + 1
                     end
 
 
