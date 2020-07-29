@@ -4,6 +4,7 @@ require "logstash/namespace"
 require "redis"
 require "redlock"
 require "monitor"
+require "json"
 
 class LogStash::Filters::CacheRedis < LogStash::Filters::Base
     config_name "cache_redis"
@@ -249,11 +250,12 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                         fields = n_event.keys
                         fields.each do |ffield|
-
                             begin
-                                deserialize_val = Marshal.load(n_event[ffield])
-                                event.set(ffield, deserialize_val)
-                            rescue => eee
+                                resolve_val = redis_resolve_cache_field(n_event[ffield], event, ffield)
+                                event.set(ffield, resolve_val)
+#                                 deserialize_val = Marshal.load(n_event[ffield])
+#                                 event.set(ffield, deserialize_val)
+                            rescue => e
                                 @logger.error("use_event, set event field failed. ", :event => event, :exception => e, :backtrace => e.backtrace)
                             end
 #                             if ffield == "@timestamp" || ffield == "[@timestamp]"
@@ -349,12 +351,32 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             end
         else
             if not ignore_ff.include?(ff)
-                mar_val = Marshal.dump(val)
-                @mul_redis.hset(event.sprintf(redis_key), ff, mar_val)
+                begin
+                    val_clz = val.class.to_s
+                    tmp_hash = { :clz => val_clz, :val => val}
+                    val_json_str = JSON.generate(tmp_hash)
+                    @mul_redis.hset(event.sprintf(redis_key), ff, val_json_str)
+                rescue => e
+                    @logger.error("cache_event.cache_field [#{ff} => #{val}] failed!  ", :event => event, :exception => e, :backtrace => e.backtrace)
+                    @mul_redis.hset(event.sprintf(redis_key), ff, val)
+                end
                 arr_fields << ff
             end
         end
 
+    end
+
+    def redis_resolve_cache_field(json_str, event, field)
+        ret_val = nil
+        begin
+            tmp_hash = JSON.parse(json_str)
+            ret_val = tmp_hash["val"]
+        rescue => e
+            @logger.error("use_event.use_field [#{field}] failed!  ", :event => event, :exception => e, :backtrace => e.backtrace)
+            ret_val = json_str
+        end
+
+        ret_val
     end
 
 
