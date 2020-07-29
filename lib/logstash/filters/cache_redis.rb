@@ -19,7 +19,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
 
     config :wait_interval, :validate => :number, :default => 0
-    
+
     config :wait_max_time, :validate => :number, :default => 0
 
     config :expire_ex, :validate => :number, :default => 0
@@ -140,7 +140,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         l_wait_max_time = l_wait_max_time - 1
                     end
                     event.set(@field, val)
-                
+
                     if val.nil?
                         cmd_res = false;
                     end
@@ -153,7 +153,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                         l_wait_max_time = l_wait_max_time - 1
                     end
                     event.set(@field, val)
-                
+
                     if val.nil?
                         cmd_res = false;
                     else
@@ -213,7 +213,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
                     if m_r.nil?
                         cmd_res = false
                         @logger.warn("redis_cache_event failed, redis.exec() not running", event => event)
-                    else 
+                    else
                         ii = 0;
                         m_r.each do |ff|
                             if ff != 1
@@ -249,12 +249,14 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                         fields = n_event.keys
                         fields.each do |ffield|
-                            if ffield == "@timestamp" || ffield == "[@timestamp]"
-                                val = LogStash::Timestamp.new(n_event[ffield])
-                                event.set(ffield, val)
-                            else
-                                event.set(ffield, n_event[ffield])
-                            end
+                            deserialize_val = Marshal.load(n_event[ffield])
+                            event.set(ffield, deserialize_val)
+#                             if ffield == "@timestamp" || ffield == "[@timestamp]"
+#                                 val = LogStash::Timestamp.new(n_event[ffield])
+#                                 event.set(ffield, val)
+#                             else
+#                                 event.set(ffield, n_event[ffield])
+#                             end
                         end
 
                     end
@@ -263,7 +265,7 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
 
 
-                    
+
                 end
 
 
@@ -342,7 +344,8 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
             end
         else
             if not ignore_ff.include?(ff)
-                @mul_redis.hset(event.sprintf(redis_key), ff, val)
+                mar_val = Marshal.dump(val)
+                @mul_redis.hset(event.sprintf(redis_key), ff, mar_val)
                 arr_fields << ff
             end
         end
