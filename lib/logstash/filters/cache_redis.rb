@@ -249,8 +249,13 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
 
                         fields = n_event.keys
                         fields.each do |ffield|
-                            deserialize_val = Marshal.load(n_event[ffield])
-                            event.set(ffield, deserialize_val)
+
+                            begin
+                                deserialize_val = Marshal.load(n_event[ffield])
+                                event.set(ffield, deserialize_val)
+                            rescue => eee
+                                @logger.error("use_event, set event field failed. ", :event => event, :exception => e, :backtrace => e.backtrace)
+                            end
 #                             if ffield == "@timestamp" || ffield == "[@timestamp]"
 #                                 val = LogStash::Timestamp.new(n_event[ffield])
 #                                 event.set(ffield, val)
