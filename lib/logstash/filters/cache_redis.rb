@@ -370,7 +370,11 @@ class LogStash::Filters::CacheRedis < LogStash::Filters::Base
         ret_val = nil
         begin
             tmp_hash = JSON.parse(json_str)
-            ret_val = tmp_hash["val"]
+            if tmp_hash["clz"] == "LogStash::Timestamp"
+                ret_val = LogStash::Timestamp.new(tmp_hash["val"])
+            else
+                ret_val = tmp_hash["val"]
+            end
         rescue => e
             @logger.error("use_event.use_field [#{field}] failed!  ", :event => event, :exception => e, :backtrace => e.backtrace)
             ret_val = json_str
